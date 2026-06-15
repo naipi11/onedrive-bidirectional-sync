@@ -130,7 +130,6 @@ class DeviceCodeModal extends Modal {
     this.contentEl.createEl("p", { text: this.message });
     this.contentEl.createEl("p", { text: `代码：${this.code}` });
     new Setting(this.contentEl)
-      .addButton((button) => button.setButtonText("复制代码").onClick(() => void navigator.clipboard.writeText(this.code)))
       .addButton((button) => button.setButtonText("打开登录页面").setCta().onClick(() => window.open(this.uri)));
     this.contentEl.createEl("p", { text: "完成授权后，此窗口可关闭；插件会继续等待登录结果。" });
   }

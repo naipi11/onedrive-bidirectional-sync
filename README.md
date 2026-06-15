@@ -1,46 +1,91 @@
 # OneDrive Bidirectional Sync
 
-[MIT License](LICENSE)
+Synchronize Obsidian vault files across Windows, Linux, macOS, iOS, and Android
+through a private OneDrive app folder. The plugin communicates directly with
+Microsoft Graph and does not require the OneDrive desktop client.
 
-一个不依赖本地 OneDrive 客户端的 Obsidian 双向同步插件 MVP，可运行于 Windows、Linux、macOS、iOS 和 Android。
+## Features
 
-## 工作方式
+- Uses the least-privileged Microsoft Graph `Files.ReadWrite.AppFolder`
+  permission.
+- Uploads and downloads file changes between multiple devices.
+- Propagates file deletions in both directions.
+- Preserves a local conflict copy when the same file changed on both sides.
+- Supports automatic synchronization at a configurable interval.
+- Excludes `.obsidian` by default to avoid syncing device-specific settings and
+  the plugin's authentication data.
 
-- 通过 Microsoft Graph 直接访问 OneDrive。
-- 仅申请 `Files.ReadWrite.AppFolder` 权限，远端数据位于 `OneDrive/Apps/<应用名称>/vaults/<库 ID>/`。
-- 使用本机同步快照判断文件在本地或远端是否变化。
-- 两端同时修改同一文件时，保留一个带“本地冲突”后缀的副本，并将远端版本写入原路径。
-- 默认不同步 `.obsidian`，避免插件自身令牌和设备工作区配置被同步。
+## Important safety information
 
-## 安装与构建
+This plugin is an early release. Back up your vault before the first sync.
+Avoid editing the same file on multiple devices at the same time.
 
-```powershell
-npm install
-npm run build
+Authentication tokens are stored in the plugin's local Obsidian data file.
+Never share that file. The plugin always excludes its own `data.json` from
+synchronization.
+
+## Installation
+
+Install the plugin from the Obsidian community plugin directory when available.
+For manual installation, place `manifest.json` and `main.js` in:
+
+```text
+<vault>/.obsidian/plugins/onedrive-bidirectional-sync/
 ```
 
-将 `manifest.json`、`main.js` 复制到库的 `.obsidian/plugins/onedrive-bidirectional-sync/`，然后在 Obsidian 中启用插件。
+Then reload Obsidian and enable **OneDrive Bidirectional Sync** under Community
+plugins.
 
-## Microsoft Entra 应用注册
+## Microsoft Entra application setup
 
-1. 在 Microsoft Entra 管理中心创建应用注册。
-2. “支持的账户类型”选择同时支持组织目录与个人 Microsoft 账户。
-3. 在“身份验证”中启用“允许公共客户端流”。
-4. 添加 Microsoft Graph 委托权限 `Files.ReadWrite.AppFolder`；`offline_access` 会在登录时请求。
-5. 将 Application (client) ID 填入插件设置。
+Each user currently needs a Microsoft Entra application registration:
 
-所有设备必须填写相同的客户端 ID、登录同一个 Microsoft 账户，并填写相同的库 ID。
+1. Create an application registration in the Microsoft Entra admin center.
+2. Select the account type that supports organizational directories and
+   personal Microsoft accounts.
+3. Enable **Allow public client flows** under Authentication.
+4. Add the delegated Microsoft Graph permission `Files.ReadWrite.AppFolder`.
+5. Enter the application's **Application (client) ID** in the plugin settings.
 
-## 当前限制
+All devices must use the same client ID, Microsoft account, and vault ID.
 
-- 单文件上传使用 Graph 简单上传接口，最大支持 250 MB。
-- 初始同步按修改时间决定同名文件方向；建议先在主设备上传，再连接其他设备。
-- iOS 和 Android 会限制后台运行，打开 Obsidian 后或手动执行同步更可靠。
-- 令牌保存在 Obsidian 插件数据文件中。不要同步或分享插件自身的 `data.json`。
-- 这是 MVP，尚未实现 Graph delta 增量扫描、分块上传、端到端加密和自动化测试。
+## How synchronization works
 
-## 官方接口文档
+Remote files are stored under the application's private OneDrive app folder:
+
+```text
+OneDrive/Apps/<application name>/vaults/<vault ID>/
+```
+
+The plugin stores a local synchronization snapshot and compares it with local
+file metadata and OneDrive item ETags. A one-sided change is propagated to the
+other side. If both sides changed, the local version is preserved as a conflict
+copy and the remote version replaces the original path.
+
+## Current limitations
+
+- Simple uploads support files up to 250 MB.
+- Initial synchronization resolves different same-path files using modification
+  time. Upload from the primary device before connecting additional devices.
+- iOS and Android may suspend background timers. Sync after opening Obsidian or
+  run the manual sync command.
+- Microsoft Graph delta queries, resumable uploads, end-to-end encryption, and
+  automated integration tests are not yet implemented.
+
+## Development
+
+```bash
+pnpm install
+pnpm typecheck
+pnpm build
+```
+
+## References
 
 - [Microsoft Graph OneDrive app folder](https://learn.microsoft.com/graph/onedrive-sharepoint-appfolder)
 - [Microsoft identity platform device authorization grant](https://learn.microsoft.com/entra/identity-platform/v2-oauth2-device-code)
 - [Microsoft Graph upload or replace file contents](https://learn.microsoft.com/graph/api/driveitem-put-content)
+
+## License
+
+[MIT](LICENSE)
