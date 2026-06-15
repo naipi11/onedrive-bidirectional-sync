@@ -143,7 +143,7 @@ class OneDriveSyncSettingTab extends PluginSettingTab {
   display(): void {
     const { containerEl } = this;
     containerEl.empty();
-    containerEl.createEl("h2", { text: "OneDrive 双向同步" });
+    new Setting(containerEl).setName("OneDrive 双向同步").setHeading();
     containerEl.createEl("p", {
       text: "所有设备必须使用相同的客户端 ID 和库 ID。插件只访问 OneDrive 的应用专属目录。"
     });
@@ -195,7 +195,7 @@ class OneDriveSyncSettingTab extends PluginSettingTab {
       }));
 
     new Setting(containerEl)
-      .setName("同步 .obsidian 配置目录")
+      .setName("同步 Obsidian 配置目录")
       .setDesc("默认关闭。开启后插件、主题与工作区配置也会同步，发生冲突的风险更高。")
       .addToggle((toggle) => toggle.setValue(this.plugin.settings.syncConfigDir).onChange(async (value) => {
         this.plugin.settings.syncConfigDir = value;

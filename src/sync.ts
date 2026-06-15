@@ -1,4 +1,4 @@
-import { App, normalizePath } from "obsidian";
+import { App, normalizePath, Platform } from "obsidian";
 import { GraphClient } from "./graph";
 import type { LocalItem, RemoteItem, SyncEntry, SyncSettings, SyncSummary } from "./types";
 
@@ -183,8 +183,9 @@ export class SyncEngine {
   }
 
   private excluded(path: string): boolean {
-    if (path === ".obsidian/plugins/onedrive-bidirectional-sync/data.json") return true;
-    if (!this.settings.syncConfigDir && (path === ".obsidian" || path.startsWith(".obsidian/"))) return true;
+    const configDir = normalizePath(this.app.vault.configDir);
+    if (path === `${configDir}/plugins/onedrive-bidirectional-sync/data.json`) return true;
+    if (!this.settings.syncConfigDir && (path === configDir || path.startsWith(`${configDir}/`))) return true;
     const patterns = this.settings.excludedPatterns.split(/\r?\n/).map((p) => p.trim()).filter(Boolean);
     return patterns.some((pattern) => wildcard(pattern, path));
   }
@@ -196,10 +197,9 @@ function changedLocal(local: LocalItem, previous: SyncEntry): boolean {
 
 function wildcard(pattern: string, value: string): boolean {
   const regex = pattern
-    .replace(/[.+^${}()|[\]\\]/g, "\\$&")
-    .replace(/\*\*/g, "\u0000")
-    .replace(/\*/g, "[^/]*")
-    .replace(/\u0000/g, ".*");
+    .split("**")
+    .map((part) => part.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, "[^/]*"))
+    .join(".*");
   return new RegExp(`^${regex}$`).test(value);
 }
 
@@ -208,5 +208,10 @@ function timestamp(): string {
 }
 
 function deviceLabel(): string {
-  return navigator.platform?.replace(/\s+/g, "-") || "device";
+  if (Platform.isIosApp) return "iOS";
+  if (Platform.isAndroidApp) return "Android";
+  if (Platform.isMacOS) return "macOS";
+  if (Platform.isWin) return "Windows";
+  if (Platform.isLinux) return "Linux";
+  return Platform.isMobileApp ? "mobile" : "desktop";
 }

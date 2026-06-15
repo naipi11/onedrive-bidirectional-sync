@@ -32,6 +32,10 @@ jobs:
             manifest.json
       - uses: softprops/action-gh-release@v2
         with:
+          body: |
+            OneDrive Bidirectional Sync release ${{ github.ref_name }}.
+
+            See the repository README for setup instructions, safety information, and current limitations.
           files: |
             main.js
             manifest.json

@@ -44,7 +44,7 @@ export class MicrosoftAuth {
       throw: false
     });
     if (response.status !== 200) throw new Error(readOAuthError(response.json));
-    return response.json as DeviceCodeResponse;
+    return readDeviceCode(response.json);
   }
 
   async finishDeviceCode(code: DeviceCodeResponse): Promise<void> {
@@ -65,10 +65,10 @@ export class MicrosoftAuth {
         throw: false
       });
       if (response.status === 200) {
-        await this.acceptToken(response.json as TokenResponse);
+        await this.acceptToken(readToken(response.json));
         return;
       }
-      const error = response.json as OAuthError;
+      const error = readOAuthResponse(response.json);
       if (error.error === "authorization_pending") continue;
       if (error.error === "slow_down") {
         interval += 5000;
@@ -96,8 +96,9 @@ export class MicrosoftAuth {
       throw: false
     });
     if (response.status !== 200) throw new Error(readOAuthError(response.json));
-    await this.acceptToken(response.json as TokenResponse);
-    return this.token!.accessToken;
+    await this.acceptToken(readToken(response.json));
+    if (!this.token) throw new Error("Microsoft 登录状态丢失");
+    return this.token.accessToken;
   }
 
   private get baseUrl(): string {
@@ -123,8 +124,59 @@ function form(values: Record<string, string>): string {
 }
 
 function readOAuthError(value: unknown): string {
-  const error = value as OAuthError | undefined;
+  const error = readOAuthResponse(value);
   return error?.error_description ?? error?.error ?? "Microsoft 登录请求失败";
+}
+
+function readDeviceCode(value: unknown): DeviceCodeResponse {
+  if (!isRecord(value)) throw new Error("Microsoft 登录响应格式无效");
+  const deviceCode = value.device_code;
+  const userCode = value.user_code;
+  const verificationUri = value.verification_uri;
+  const expiresIn = value.expires_in;
+  const interval = value.interval;
+  const message = value.message;
+  if (
+    typeof deviceCode !== "string" ||
+    typeof userCode !== "string" ||
+    typeof verificationUri !== "string" ||
+    typeof expiresIn !== "number" ||
+    typeof interval !== "number" ||
+    typeof message !== "string"
+  ) {
+    throw new Error("Microsoft 登录响应缺少必要字段");
+  }
+  return {
+    device_code: deviceCode,
+    user_code: userCode,
+    verification_uri: verificationUri,
+    expires_in: expiresIn,
+    interval,
+    message
+  };
+}
+
+function readToken(value: unknown): TokenResponse {
+  if (!isRecord(value) || typeof value.access_token !== "string" || typeof value.expires_in !== "number") {
+    throw new Error("Microsoft 令牌响应格式无效");
+  }
+  return {
+    access_token: value.access_token,
+    refresh_token: typeof value.refresh_token === "string" ? value.refresh_token : undefined,
+    expires_in: value.expires_in
+  };
+}
+
+function readOAuthResponse(value: unknown): OAuthError {
+  if (!isRecord(value) || typeof value.error !== "string") return { error: "Microsoft 登录请求失败" };
+  return {
+    error: value.error,
+    error_description: typeof value.error_description === "string" ? value.error_description : undefined
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }
 
 function sleep(ms: number): Promise<void> {

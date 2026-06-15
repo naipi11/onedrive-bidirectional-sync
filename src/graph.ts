@@ -22,7 +22,7 @@ export class GraphClient {
   constructor(private readonly auth: MicrosoftAuth) {}
 
   async ensureVaultFolder(vaultId: string): Promise<DriveItemJson> {
-    const appRoot = await this.json<DriveItemJson>("GET", "/me/drive/special/approot");
+    const appRoot = readDriveItem(await this.json("GET", "/me/drive/special/approot"));
     const vaults = await this.ensureChildFolder(appRoot.id, "vaults");
     return this.ensureChildFolder(vaults.id, vaultId);
   }
@@ -44,12 +44,12 @@ export class GraphClient {
     const name = parts.pop();
     if (!name) throw new Error(`无效路径: ${path}`);
     const parentId = await this.ensureFolderPath(rootId, parts);
-    const item = await this.json<DriveItemJson>(
+    const item = readDriveItem(await this.json(
       "PUT",
       `/me/drive/items/${parentId}:/${encodeURIComponent(name)}:/content`,
       data,
       "application/octet-stream"
-    );
+    ));
     return toRemote(item, path);
   }
 
@@ -61,7 +61,7 @@ export class GraphClient {
   private async walk(parentId: string, parentPath: string, result: Map<string, RemoteItem>): Promise<void> {
     let url: string | undefined = `/me/drive/items/${parentId}/children?$top=200`;
     while (url) {
-      const page: ChildrenResponse = await this.json<ChildrenResponse>("GET", url);
+      const page = readChildren(await this.json("GET", url));
       for (const item of page.value) {
         const path = parentPath ? `${parentPath}/${item.name}` : item.name;
         if (item.folder) await this.walk(item.id, path, result);
@@ -84,12 +84,12 @@ export class GraphClient {
       JSON.stringify({ name, folder: {}, "@microsoft.graph.conflictBehavior": "fail" }),
       "application/json"
     );
-    if (response.status >= 200 && response.status < 300) return response.json as DriveItemJson;
+    if (response.status >= 200 && response.status < 300) return readDriveItem(response.json);
     if (response.status !== 409) throw graphError(response.status, response.json);
 
     let url: string | undefined = `/me/drive/items/${parentId}/children?$select=id,name,folder&$top=200`;
     while (url) {
-      const page: ChildrenResponse = await this.json<ChildrenResponse>("GET", url);
+      const page = readChildren(await this.json("GET", url));
       const found = page.value.find((item) => item.name === name && item.folder);
       if (found) return found;
       url = page["@odata.nextLink"];
@@ -97,10 +97,10 @@ export class GraphClient {
     throw new Error(`无法找到远端目录: ${name}`);
   }
 
-  private async json<T>(method: string, pathOrUrl: string, body?: string | ArrayBuffer, contentType?: string): Promise<T> {
+  private async json(method: string, pathOrUrl: string, body?: string | ArrayBuffer, contentType?: string): Promise<unknown> {
     const response = await this.request(method, pathOrUrl, body, contentType);
     if (response.status < 200 || response.status >= 300) throw graphError(response.status, response.json);
-    return response.json as T;
+    return response.json;
   }
 
   private async request(method: string, pathOrUrl: string, body?: string | ArrayBuffer, contentType?: string) {
@@ -133,6 +133,35 @@ function splitPath(path: string): string[] {
 }
 
 function graphError(status: number, value: unknown): Error {
-  const graph = value as { error?: { message?: string; code?: string } } | undefined;
-  return new Error(`OneDrive 请求失败 (${status}): ${graph?.error?.message ?? graph?.error?.code ?? "未知错误"}`);
+  const error = isRecord(value) && isRecord(value.error) ? value.error : undefined;
+  const detail = typeof error?.message === "string" ? error.message : typeof error?.code === "string" ? error.code : "未知错误";
+  return new Error(`OneDrive 请求失败 (${status}): ${detail}`);
+}
+
+function readDriveItem(value: unknown): DriveItemJson {
+  if (!isRecord(value) || typeof value.id !== "string" || typeof value.name !== "string") {
+    throw new Error("OneDrive 返回了无效的文件信息");
+  }
+  return {
+    id: value.id,
+    name: value.name,
+    eTag: typeof value.eTag === "string" ? value.eTag : undefined,
+    size: typeof value.size === "number" ? value.size : undefined,
+    lastModifiedDateTime: typeof value.lastModifiedDateTime === "string" ? value.lastModifiedDateTime : undefined,
+    folder: isRecord(value.folder) && typeof value.folder.childCount === "number"
+      ? { childCount: value.folder.childCount }
+      : undefined
+  };
+}
+
+function readChildren(value: unknown): ChildrenResponse {
+  if (!isRecord(value) || !Array.isArray(value.value)) throw new Error("OneDrive 返回了无效的目录列表");
+  return {
+    value: value.value.map(readDriveItem),
+    "@odata.nextLink": typeof value["@odata.nextLink"] === "string" ? value["@odata.nextLink"] : undefined
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }
