@@ -1,0 +1,10 @@
+{
+  "id": "onedrive-bidirectional-sync",
+  "name": "OneDrive Bidirectional Sync",
+  "version": "0.1.0",
+  "minAppVersion": "1.5.0",
+  "description": "Synchronize vault files across devices through a private OneDrive app folder.",
+  "author": "naipi11",
+  "authorUrl": "https://github.com/naipi11",
+  "isDesktopOnly": false
+}
